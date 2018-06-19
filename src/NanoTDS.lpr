@@ -8,7 +8,8 @@ uses
   cthreads,
   {$ENDIF}{$ENDIF}
   Interfaces, // this includes the LCL widgetset
-  Forms, untMain, gMainMenu, gControls, gInGameMenu, gLevel, gTypes;
+  Forms, untMain, gMainMenu, gControls, gInGameMenu, gLevel, gTypes, gInGameUI,
+  gGameOverMenu;
 
 {$R *.res}
 

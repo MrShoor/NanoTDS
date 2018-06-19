@@ -48,6 +48,7 @@ begin
   begin
     Canvas.Font.Name := cGameFont;
     Canvas.Font.Color := Vec(0,0,0,1);
+    Canvas.Font.Size := 24;
     with Canvas.TextBuilder do
     begin
       Align := laCenter;

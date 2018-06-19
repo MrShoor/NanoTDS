@@ -114,7 +114,7 @@
         <PackageName Value="LCL"/>
       </Item2>
     </RequiredPackages>
-    <Units Count="7">
+    <Units Count="9">
       <Unit0>
         <Filename Value="NanoTDS.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -151,6 +151,16 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="gTypes"/>
       </Unit6>
+      <Unit7>
+        <Filename Value="gingameui.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="gInGameUI"/>
+      </Unit7>
+      <Unit8>
+        <Filename Value="ggameovermenu.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="gGameOverMenu"/>
+      </Unit8>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

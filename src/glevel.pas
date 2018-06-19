@@ -8,12 +8,14 @@ interface
 
 uses
   Classes, SysUtils,
-  avRes, avTypes, avContnrs,
+  avRes, avTypes, avContnrs, avModel,
   mutils,
   bWorld,
   bLights,
   bUtils,
-  gInGameMenu;
+  gInGameMenu,
+  gInGameUI,
+  gGameOverMenu;
 
 type
 
@@ -54,9 +56,17 @@ type
     FRoute: TVec3Arr;
     FRoutePos: TPathPos;
     FRouteVelocity: Single;
+
+    FHittedTime  : Integer;
+    FHittedModels: IavModelInstanceArr;
+    FNormalModels: IavModelInstanceArr;
   protected
+    procedure AfterRegister; override;
     procedure UpdateStep; override;
   public
+    procedure AddModel(const AName: string; AType: TModelType = mtDefault); override;
+
+    procedure AddDamage(const ADir: TVec3);
     procedure SetRoute(const ARoute: TVec3Arr; const AVelocity: Single);
     property HP: Integer read FHP write FHP;
   end;
@@ -66,6 +76,20 @@ type
   IBoxes = {$IfDef FPC}specialize{$EndIf}IArray<TRectF>;
   TBoxes = {$IfDef FPC}specialize{$EndIf}TArray<TRectF>;
 
+  { TbBullet }
+
+  TbBullet = class(TbGameObject)
+  private
+    FSpeedXZ: TVec2;
+  protected
+    procedure AfterRegister; override;
+    procedure UpdateStep; override;
+  public
+    property SpeedXZ: TVec2 read FSpeedXZ write FSpeedXZ;
+  end;
+  IbBulletArr = {$IfDef FPC}specialize{$EndIf}IArray<TbBullet>;
+  TbBulletArr = {$IfDef FPC}specialize{$EndIf}TArray<TbBullet>;
+
   { TGameLevel }
 
   TGameLevel = class(TavMainRenderChild)
@@ -73,6 +97,7 @@ type
     FOnExit: TNotifyEvent;
     FOnRestart: TNotifyEvent;
     FInGameMenu: TInGameMenu;
+    FGameOverMenu: TGameOverPanel;
   protected
     procedure MenuResume(ASender: TObject);
     procedure MenuRestart(ASender: TObject);
@@ -81,15 +106,23 @@ type
     FWorld: TbWorld;
     FGlobalLight: IavPointLight;
 
+    FHUD : THUD;
+    FBaseHP: Integer;
+    FScores: Integer;
+
     FBotRoutes: array[0..5] of TVec3Arr;
     FBotRedSpawner: TbBotSpawner;
     FBotGreenSpawner: TbBotSpawner;
     FBots: IbBotArr;
 
     FBoxes: IBoxes;
+    FBaseBoxes: IBoxes;
 
     FPlayer: TbRobot;
+    FShootNextTime: Integer;
+    FBullets: IbBulletArr;
 
+    function IsGameOver(): Boolean;
     procedure DoSpawnReds(ASender: TObject);
     procedure DoSpawnGreen(ASender: TObject);
   protected
@@ -112,13 +145,36 @@ uses
 
 const
   VK_ESCAPE = 27;
+  VK_LBUTTON = 1;
 
   cFristSpawnDelay = 0;
   cRedIntervals      : array [0..3] of Integer = (5000, 4000, 3000, 2000);
   cGreenIntervals    : array [0..3] of Integer = (7500, 6000, 4500, 3000);
   cIntencityTimes: array [0..3] of Integer = (0, 60000, 120000, 180000);
 
+{ TbBullet }
+
+procedure TbBullet.AfterRegister;
+begin
+  inherited AfterRegister;
+  SubscribeForUpdateStep;
+end;
+
+procedure TbBullet.UpdateStep;
+var speed: TVec3;
+begin
+  inherited UpdateStep;
+  speed := Vec(FSpeedXZ.x, 0, FSpeedXZ.y) * (Main.UpdateStatesInterval / 1000);
+  Pos := Pos + speed;
+end;
+
 { TbBot }
+
+procedure TbBot.AfterRegister;
+begin
+  inherited AfterRegister;
+  FHittedModels := World.Renderer.CreateModelInstances(['Enemy_hitted']);
+end;
 
 procedure TbBot.UpdateStep;
 var lookDir: TVec3;
@@ -127,6 +183,24 @@ begin
   Pos := TravelByPath(FRoute, FRouteVelocity, FRoutePos, false);
   lookDir := normalize(FRoute[FRoutePos.Idx+1] - FRoute[FRoutePos.Idx]);
   LookAtXZ := Lerp(LookAtXZ, Vec(lookDir.x, lookDir.z), 0.05);
+
+  if (World.GameTime * Main.UpdateStatesInterval < FHittedTime) then
+    FModels := FHittedModels
+  else
+    FModels := FNormalModels;
+end;
+
+procedure TbBot.AddModel(const AName: string; AType: TModelType);
+begin
+  inherited AddModel(AName, AType);
+  FNormalModels := FModels;
+end;
+
+procedure TbBot.AddDamage(const ADir: TVec3);
+begin
+  Dec(FHP);
+  FPosAccum := FPosAccum + ADir*0.1;
+  FHittedTime := World.GameTime * Main.UpdateStatesInterval + 200;
 end;
 
 procedure TbBot.SetRoute(const ARoute: TVec3Arr; const AVelocity: Single);
@@ -235,6 +309,11 @@ begin
   if Assigned(FOnExit) then FOnExit(ASender);
 end;
 
+function TGameLevel.IsGameOver: Boolean;
+begin
+  Result := FGameOverMenu.Visible;
+end;
+
 procedure TGameLevel.DoSpawnReds(ASender: TObject);
 var bot: TbBot;
 begin
@@ -280,13 +359,76 @@ const cRobotRadius = 0.5;
       AObj.Pos := AObj.Pos + Vec(minPushDir.x, 0, minPushDir.y);
     end;
   end;
-var i: Integer;
+var i, j: Integer;
 begin
   for i := 0 to FBoxes.Count - 1 do
     PushOut(FPlayer, cRobotRadius, FBoxes[i]);
+
+  for i := 0 to FBoxes.Count - 1 do
+    for j := FBullets.Count - 1 downto 0 do
+    begin
+      if FBoxes[i].PtInRect(Vec(FBullets[j].Pos.x, FBullets[j].Pos.z)) then
+      begin
+        FBullets[j].Free;
+        FBullets.DeleteWithSwap(j);
+      end;
+    end;
+
+  for i := FBots.Count - 1 downto 0 do
+    for j := FBullets.Count - 1 downto 0 do
+      if LenSqr(FBots[i].Pos - FBullets[j].Pos) < Sqr(cRobotRadius) then
+      begin
+        FBots[i].AddDamage(Vec(FBullets[j].SpeedXZ.x, 0, FBullets[j].SpeedXZ.y));
+        FBullets[j].Free;
+        FBullets.DeleteWithSwap(j);
+
+        if FBots[i].HP <= 0 then
+        begin
+          Inc(FScores);
+          FBots[i].Free;
+          FBots.DeleteWithSwap(i);
+          Break;
+        end;
+      end;
+
+  for i := 0 to FBaseBoxes.Count - 1 do
+    for j := FBots.Count - 1 downto 0 do
+      if FBaseBoxes[i].PtInRect(Vec(FBots[j].Pos.x, FBots[j].Pos.z)) then
+      begin
+        Dec(FBaseHP);
+        FBots[j].Free;
+        FBots.DeleteWithSwap(j);
+      end;
+
+  if (FBaseHP <= 0) and not IsGameOver() then
+  begin
+    FreeAndNil(FBotRedSpawner);
+    FreeAndNil(FBotGreenSpawner);
+    FGameOverMenu.ElapsedTime := FWorld.GameTime * Main.UpdateStatesInterval;
+    FGameOverMenu.Score := FScores;
+    FGameOverMenu.Visible := True;
+  end;
 end;
 
 procedure TGameLevel.ProcessInput;
+
+  procedure DoShoot;
+  var time: Int64;
+      bullet: TbBullet;
+  begin
+    time := FWorld.GameTime * Main.UpdateStatesInterval;
+    if time >= FShootNextTime then
+    begin
+      bullet := TbBullet.Create(FWorld);
+      bullet.AddModel('Bullet');
+      bullet.SpeedXZ := SetLen(FPlayer.LookAtXZ, 4);
+      bullet.Pos := FPlayer.Pos;
+      bullet.Rot := Quat(Vec(0,-1,0), arctan2(FPlayer.LookAtXZ.y, FPlayer.LookAtXZ.x));
+      FBullets.Add(bullet);
+      FShootNextTime := time + (1000 div 5);
+    end;
+  end;
+
 const cPlayerSpeed = 3;
 var lookPt : TVec3;
     speed  : Single;
@@ -308,12 +450,15 @@ begin
     lookPt := lookPt - FPlayer.Pos;
     FPlayer.LookAtXZ := Vec(lookPt.x, lookPt.z);
   end;
+
+  if IsKeyPressed(VK_LBUTTON) then DoShoot;
 end;
 
 procedure TGameLevel.EMKeyDown(var AMsg: TavKeyDownMessage);
 begin
-  if AMsg.Key = VK_ESCAPE then
-    FInGameMenu.Visible := not FInGameMenu.Visible;
+  if not IsGameOver() then
+    if AMsg.Key = VK_ESCAPE then
+      FInGameMenu.Visible := not FInGameMenu.Visible;
 end;
 
 procedure TGameLevel.EMUps(var AMsg: TavMessage);
@@ -322,7 +467,14 @@ begin
   begin
     FWorld.UpdateStep;
     ResolveCollisions;
-    ProcessInput;
+    if not IsGameOver() then
+    begin
+      ProcessInput;
+
+      FHUD.HP := FBaseHP;
+      FHUD.Score := FScores;
+      FHUD.ElapsedTime := FWorld.GameTime * Main.UpdateStatesInterval;
+    end;
   end;
 end;
 
@@ -351,6 +503,8 @@ begin
     AddModel('level0');
   end;
 
+  FBaseHP := 5;
+
   FGlobalLight := FWorld.Renderer.CreatePointLight();
   FGlobalLight.Pos := Vec(0, 20, 0);
   FGlobalLight.Color := Vec(1,1,1);
@@ -362,10 +516,20 @@ begin
   FPlayer.Pos := Vec(8,0,2);
 
   FInGameMenu := TInGameMenu.Create(Self);
-  FInGameMenu.Visible := True;
+  FInGameMenu.Visible := False;
   FInGameMenu.OnResume := {$IfDef FPC}@{$EndIf}MenuResume;
   FInGameMenu.OnRestart := {$IfDef FPC}@{$EndIf}MenuRestart;
   FInGameMenu.OnExit := {$IfDef FPC}@{$EndIf}MenuExit;
+
+  FGameOverMenu := TGameOverPanel.Create(Self);
+  FGameOverMenu.BtnRestart.OnClick := {$IfDef FPC}@{$EndIf}MenuRestart;
+  FGameOverMenu.BtnExit.OnClick := {$IfDef FPC}@{$EndIf}MenuExit;
+  FGameOverMenu.Visible := False;
+
+  FHUD := THUD.Create(Self);
+  FHUD.HP := FBaseHP;
+  FHUD.Score := FScores;
+  FHUD.ElapsedTime := 0;
 
   SetRoute(FBotRoutes[0], [Vec(3,0,15), Vec(1,0,15), Vec(1,0,1), Vec(7,0,1)]);
   SetRoute(FBotRoutes[1], [Vec(3,0,15), Vec(5,0,15), Vec(5,0,1), Vec(7,0,1)]);
@@ -393,14 +557,26 @@ begin
   for i := 0 to 8 do FBoxes.Add(ColliderBox(Vec(i, 8)));
   for i := 0 to 8 do FBoxes.Add(ColliderBox(Vec(8, 7-i)));
   for i := 0 to 8 do FBoxes.Add(ColliderBox(Vec(7-i,-1)));
+
+  FBaseBoxes := TBoxes.Create();
+  FBaseBoxes.Add(ColliderBox(Vec(3, 0)));
+  FBaseBoxes.Add(ColliderBox(Vec(4, 0)));
+  FBaseBoxes.Add(ColliderBox(Vec(3, 1)));
+  FBaseBoxes.Add(ColliderBox(Vec(4, 1)));
+
+  FBullets := TbBulletArr.Create();
 end;
 
 procedure TGameLevel.Draw;
 begin
   FWorld.Renderer.PrepareToDraw;
   FWorld.Renderer.DrawWorld;
-  if FInGameMenu.Visible then
-    FInGameMenu.Draw;
+
+  FHUD.Pos := Vec(Main.WindowSize.x-1.0, 0);
+  FHUD.Draw;
+  FInGameMenu.Draw;
+  FGameOverMenu.Pos := Main.WindowSize * 0.5;
+  FGameOverMenu.Draw;
   Main.ActiveFrameBuffer.BlitToWindow();
 end;
 

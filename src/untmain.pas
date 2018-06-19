@@ -5,8 +5,10 @@ interface
 
 uses
   {$IfDef FPC}
+  Windows,
   LCLType,
   FileUtil,
+  LMessages,
   {$Else}
   Windows,
   Messages,
@@ -16,6 +18,9 @@ uses
   gMainMenu, gLevel, gTypes,
   avCanvas,
   avRes, avTypes, avTess, mutils;
+
+const
+  WM_RESTART_LEVEL = WM_USER + 356;
 
 type
   { TfrmMain }
@@ -41,6 +46,8 @@ type
 
     procedure StartGame(ASender: TObject);
     procedure ExitGame(ASender: TObject);
+
+    procedure WMRestartLevel(var msg: Cardinal); message WM_RESTART_LEVEL;
   public
     {$IfDef FPC}
     procedure EraseBackground(DC: HDC); override;
@@ -158,16 +165,21 @@ end;
 
 procedure TfrmMain.StartGame(ASender: TObject);
 begin
-  FreeAndNil(FGameLevel);
-  FGameLevel := TGameLevel.Create(FMain);
-  FGameLevel.LoadLevel();
-  FGameLevel.OnRestart := {$IfDef FPC}@{$EndIf}StartGame;
-  FGameLevel.OnExit := {$IfDef FPC}@{$EndIf}ExitGame;
+  PostMessage(Handle, WM_RESTART_LEVEL, 0, 0);
 end;
 
 procedure TfrmMain.ExitGame(ASender: TObject);
 begin
   Close;
+end;
+
+procedure TfrmMain.WMRestartLevel(var msg: Cardinal);
+begin
+  FreeAndNil(FGameLevel);
+  FGameLevel := TGameLevel.Create(FMain);
+  FGameLevel.LoadLevel();
+  FGameLevel.OnRestart := {$IfDef FPC}@{$EndIf}StartGame;
+  FGameLevel.OnExit := {$IfDef FPC}@{$EndIf}ExitGame;
 end;
 
 {$IfDef FPC}
