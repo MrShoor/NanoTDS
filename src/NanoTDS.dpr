@@ -2,8 +2,6 @@ program NanoTDS;
 
 //{$AppType Console}
 
-{$R 'shaders.res' '..\Src\shaders\shaders.rc'}
-
 uses
   Forms,
   untmain in 'untmain.pas' {frmMain};

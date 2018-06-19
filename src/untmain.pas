@@ -76,8 +76,6 @@ implementation
 { TfrmMain }
 
 procedure TfrmMain.FormCreate(Sender: TObject);
-var
-  i: Integer;
 begin
   SetCurrentDir(ParamStr(0));
 
@@ -104,7 +102,7 @@ begin
   FMainMenu.OnStartLevel := {$IfDef FPC}@{$EndIf}StartGame;
   FMainMenu.OnExit := {$IfDef FPC}@{$EndIf}ExitGame;
 
-  FMainMenuFBO := Create_FrameBuffer(FMain, TTextureFormat.RGBA, [true]);
+  FMainMenuFBO := Create_FrameBuffer(FMain, [TTextureFormat.RGBA], [true]);
 
   Application.OnIdle := {$IfDef FPC}@{$EndIf}Idle;
 
