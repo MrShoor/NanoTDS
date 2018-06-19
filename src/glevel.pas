@@ -152,10 +152,10 @@ const
   VK_ESCAPE = 27;
   VK_LBUTTON = 1;
 
-  cFristSpawnDelay = 0;
+  cFristSpawnDelay = 5000;
   cRedIntervals      : array [0..3] of Integer = (5000, 4000, 3000, 2000);
   cGreenIntervals    : array [0..3] of Integer = (7500, 6000, 4500, 3000);
-  cIntencityTimes: array [0..3] of Integer = (0, 60000, 120000, 180000);
+  cIntencityTimes    : array [0..3] of Integer = (0, 60000, 120000, 180000);
 
 { TbBullet }
 
