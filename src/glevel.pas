@@ -15,10 +15,10 @@ uses
   bUtils,
   gInGameMenu,
   gInGameUI,
-  gGameOverMenu;
+  gGameOverMenu,
+  bBassLight;
 
 type
-
   { TbRobot }
 
   TbRobot = class(TbGameObject)
@@ -50,8 +50,11 @@ type
     property OnSpawn: TNotifyEvent read FOnSpawn write FOnSpawn;
   end;
 
+  TbBotKind = (bkGreen, bkRed);
+
   TbBot = class(TbRobot)
   private
+    FBotKind: TbBotKind;
     FHP: Integer;
     FRoute: TVec3Arr;
     FRoutePos: TPathPos;
@@ -69,6 +72,7 @@ type
     procedure AddDamage(const ADir: TVec3);
     procedure SetRoute(const ARoute: TVec3Arr; const AVelocity: Single);
     property HP: Integer read FHP write FHP;
+    property BotKind: TbBotKind read FBotKind write FBotKind;
   end;
   IbBotArr = {$IfDef FPC}specialize{$EndIf}IArray<TbBot>;
   TbBotArr = {$IfDef FPC}specialize{$EndIf}TArray<TbBot>;
@@ -201,6 +205,7 @@ begin
   Dec(FHP);
   FPosAccum := FPosAccum + ADir*0.1;
   FHittedTime := World.GameTime * Main.UpdateStatesInterval + 200;
+  GetLightPlayer.GetStream('sounds\hit.wav').Play();
 end;
 
 procedure TbBot.SetRoute(const ARoute: TVec3Arr; const AVelocity: Single);
@@ -321,12 +326,14 @@ begin
   bot.HP := 3;
   bot.SetRoute(FBotRoutes[Random(2)], 2);
   bot.AddModel('Enemy_red');
+  bot.BotKind := bkRed;
   FBots.Add(bot);
 
   bot := TbBot.Create(FWorld);
   bot.HP := 3;
   bot.SetRoute(FBotRoutes[Random(2)+2], 2);
   bot.AddModel('Enemy_red');
+  bot.BotKind := bkRed;
   FBots.Add(bot);
 end;
 
@@ -337,6 +344,7 @@ begin
   bot.HP := 2;
   bot.SetRoute(FBotRoutes[Random(2)+4], 3);
   bot.AddModel('Enemy_green');
+  bot.BotKind := bkGreen;
   FBots.Add(bot);
 end;
 
@@ -384,6 +392,10 @@ begin
 
         if FBots[i].HP <= 0 then
         begin
+          case FBots[i].BotKind of
+            bkRed : GetLightPlayer.GetStream('sounds\red_death.wav').Play();
+            bkGreen : GetLightPlayer.GetStream('sounds\green_death.wav').Play();
+          end;
           Inc(FScores);
           FBots[i].Free;
           FBots.DeleteWithSwap(i);
@@ -407,6 +419,8 @@ begin
     FGameOverMenu.ElapsedTime := FWorld.GameTime * Main.UpdateStatesInterval;
     FGameOverMenu.Score := FScores;
     FGameOverMenu.Visible := True;
+    FHUD.HP := 0;
+    GetLightPlayer.GetStream('sounds\gameover.wav').Play();
   end;
 end;
 
@@ -421,11 +435,13 @@ procedure TGameLevel.ProcessInput;
     begin
       bullet := TbBullet.Create(FWorld);
       bullet.AddModel('Bullet');
-      bullet.SpeedXZ := SetLen(FPlayer.LookAtXZ, 4);
+      bullet.SpeedXZ := SetLen(FPlayer.LookAtXZ, 4*2);
       bullet.Pos := FPlayer.Pos;
       bullet.Rot := Quat(Vec(0,-1,0), arctan2(FPlayer.LookAtXZ.y, FPlayer.LookAtXZ.x));
       FBullets.Add(bullet);
       FShootNextTime := time + (1000 div 5);
+
+      GetLightPlayer.GetStream('sounds\shot.wav').Play();
     end;
   end;
 

@@ -17,7 +17,8 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs,
   gMainMenu, gLevel, gTypes,
   avCanvas,
-  avRes, avTypes, avTess, mutils;
+  avRes, avTypes, avTess, mutils,
+  bBassLight;
 
 const
   WM_RESTART_LEVEL = WM_USER + 356;
@@ -98,6 +99,8 @@ begin
   Application.OnIdle := {$IfDef FPC}@{$EndIf}Idle;
 
   PrecacheFont;
+
+  GetLightPlayer.GetStream('sounds\music.ogg').Play(True);
 end;
 
 procedure TfrmMain.FormDestroy(Sender: TObject);
@@ -149,7 +152,7 @@ var s: UnicodeString;
   yyyy: TVec4;
   i: Integer;
 begin
-  s := 'ResumeRestartExitNew game';
+  s := 'ResumeRestartExitNew gameScoreElapsed timeHealth/5';
   for i := 1 to Length(s) do
     GetCanvasCommonData(FMain).GetGlyphImage(cGameFont, s[i], [], xxx, yyyy);
 end;
@@ -158,7 +161,7 @@ procedure TfrmMain.DrawMainMenu;
 begin
   FMainMenuFBO.FrameRect := RectI(Vec(0,0), FMain.WindowSize);
   FMainMenuFBO.Select();
-  FMainMenuFBO.Clear(0, Vec(0,0.1,0,0));
+  FMainMenuFBO.Clear(0, cGameClearColor);
   FMainMenu.Draw;
   FMainMenuFBO.BlitToWindow();
 end;

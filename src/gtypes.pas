@@ -8,10 +8,11 @@ unit gTypes;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes, SysUtils, mutils;
 
 const
   cGameFont = 'Segoe UI';
+  cGameClearColor: TVec4 = (x: 0.0; y: 0.2; z: 0.4; w: 1.0);
 
 implementation
 
