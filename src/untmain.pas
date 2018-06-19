@@ -40,6 +40,8 @@ type
     FFPSCounter: Integer;
     FFPSMeasureTime: Integer;
 
+    FWARP: Boolean;
+
     procedure Idle(Sender: TObject; var Done: Boolean);
 
     procedure PrecacheFont;
@@ -81,7 +83,15 @@ begin
 
   FMain := TavMainRender.Create(Nil);
   FMain.Window := Handle;
-  FMain.Init3D(apiDX11);
+  try
+    FMain.Init3D(apiDX11);
+  except
+    on E: ECreateContextFailed do
+    begin
+      FWARP := True;
+      FMain.Init3D(apiDX11_WARP);
+    end;
+  end;
   FMain.Projection.DepthRange := Vec(1, 0);
   FMain.Projection.NearPlane := 0.01;
   FMain.Projection.FarPlane := 50;
@@ -112,12 +122,17 @@ procedure TfrmMain.FormPaint(Sender: TObject);
 
   procedure UpdateFPS;
   var measureTime: Int64;
+      s: string;
   begin
     measureTime := FMain.Time64 div 100;
     if measureTime > FFPSMeasureTime then
     begin
       FFPSMeasureTime := measureTime;
-      Caption := 'FPS:' + IntToStr(FFPSCounter*10 + Random(10));
+      s := 'FPS:' + IntToStr(FFPSCounter*10 + Random(10));
+      if FWARP then
+        Caption := 'WARP DEVICE! ' + s
+      else
+        Caption := s;
       FFPSCounter := 0;
     end
     else

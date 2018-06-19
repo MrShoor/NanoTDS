@@ -478,20 +478,23 @@ begin
 end;
 
 procedure TGameLevel.EMUps(var AMsg: TavMessage);
+var
+  i: Integer;
 begin
-  if not FInGameMenu.Visible then
-  begin
-    FWorld.UpdateStep;
-    ResolveCollisions;
-    if not IsGameOver() then
+  for i := 0 to AMsg.param - 1 do
+    if not FInGameMenu.Visible then
     begin
-      ProcessInput;
+      FWorld.UpdateStep;
+      ResolveCollisions;
+      if not IsGameOver() then
+      begin
+        ProcessInput;
 
-      FHUD.HP := FBaseHP;
-      FHUD.Score := FScores;
-      FHUD.ElapsedTime := FWorld.GameTime * Main.UpdateStatesInterval;
+        FHUD.HP := FBaseHP;
+        FHUD.Score := FScores;
+        FHUD.ElapsedTime := FWorld.GameTime * Main.UpdateStatesInterval;
+      end;
     end;
-  end;
 end;
 
 procedure TGameLevel.LoadLevel;
