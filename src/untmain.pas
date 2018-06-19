@@ -181,6 +181,7 @@ end;
 
 procedure TfrmMain.StartGame(ASender: TObject);
 begin
+  FMainMenu.Visible := False;
   PostMessage(Handle, WM_RESTART_LEVEL, 0, 0);
 end;
 
