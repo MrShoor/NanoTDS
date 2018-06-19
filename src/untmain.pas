@@ -124,11 +124,11 @@ procedure TfrmMain.FormPaint(Sender: TObject);
   var measureTime: Int64;
       s: string;
   begin
-    measureTime := FMain.Time64 div 100;
+    measureTime := FMain.Time64 div 1000;
     if measureTime > FFPSMeasureTime then
     begin
       FFPSMeasureTime := measureTime;
-      s := 'FPS:' + IntToStr(FFPSCounter*10 + Random(10));
+      s := 'FPS:' + IntToStr(FFPSCounter);
       if FWARP then
         Caption := 'WARP DEVICE! ' + s
       else
