@@ -16,6 +16,7 @@ uses
   gInGameMenu,
   gInGameUI,
   gGameOverMenu,
+  gTypes,
   bBassLight;
 
 type
@@ -589,6 +590,7 @@ end;
 procedure TGameLevel.Draw;
 begin
   FWorld.Renderer.PrepareToDraw;
+  Main.Clear(cGameClearColor, True, Main.Projection.DepthRange.y, True);
   FWorld.Renderer.DrawWorld;
 
   FHUD.Pos := Vec(Main.WindowSize.x-1.0, 0);
