@@ -187,10 +187,10 @@ begin
   begin
     AccumulatePos;
 
-    FHQTop.Mesh.Transform := Mat4(Quat(Vec(0,-1,0), arctan2(FLookAtXZ.y, FLookAtXZ.x)), Pos);
+    FHQTop.Mesh.Transform := Mat4(Quat(Vec(0,-1,0), arctan2(FLookAtXZ.y, FLookAtXZ.x)), Pos+Vec(0,0.1,0));
     movedir := Vec(FPosAccum.x, FPosAccum.z);
     if LenSqr(movedir) = 0 then movedir := FLookAtXZ;
-    FHQBot.Mesh.Transform := Mat4(Quat(Vec(0,-1,0), arctan2(movedir.y, movedir.x)), Pos);
+    FHQBot.Mesh.Transform := Mat4(Quat(Vec(0,-1,0), arctan2(movedir.y, movedir.x)), Pos+Vec(0,0.1,0));
 
     if LenSqr(FPosAccum) < 0.05 then
       FBotAnimation.AnimationStop('Walk')
@@ -429,14 +429,26 @@ begin
   bot := TbBot.Create(FWorld);
   bot.HP := 3;
   bot.SetRoute(FBotRoutes[Random(2)], 2);
-  bot.AddModel('Enemy_red');
+  if HQ then
+  begin
+    bot.AddModel('EnemyHQ_red');
+    bot.AddModel('EnemyHQ_red', mtEmissive);
+  end
+  else
+    bot.AddModel('Enemy_red');
   bot.BotKind := bkRed;
   FBots.Add(bot);
 
   bot := TbBot.Create(FWorld);
   bot.HP := 3;
   bot.SetRoute(FBotRoutes[Random(2)+2], 2);
-  bot.AddModel('Enemy_red');
+  if HQ then
+  begin
+    bot.AddModel('EnemyHQ_red');
+    bot.AddModel('EnemyHQ_red', mtEmissive);
+  end
+  else
+    bot.AddModel('Enemy_red');
   bot.BotKind := bkRed;
   FBots.Add(bot);
 end;
@@ -447,7 +459,13 @@ begin
   bot := TbBot.Create(FWorld);
   bot.HP := 2;
   bot.SetRoute(FBotRoutes[Random(2)+4], 3);
-  bot.AddModel('Enemy_green');
+  if HQ then
+  begin
+    bot.AddModel('EnemyHQ_green');
+    bot.AddModel('EnemyHQ_green', mtEmissive);
+  end
+  else
+    bot.AddModel('Enemy_green');
   bot.BotKind := bkGreen;
   FBots.Add(bot);
 end;
@@ -604,14 +622,15 @@ var i: Integer;
 begin
   FHQ := AHQ;
 
-  Main.Camera.At := Vec(8,0,8);
-  Main.Camera.Eye := Main.Camera.At + Vec(0,sin(deg2rad*60),-cos(deg2rad*60))*22;
+  Main.Camera.At := Vec(8,0,6.5);
+  Main.Camera.Eye := Main.Camera.At + Vec(0,sin(deg2rad*60),-cos(deg2rad*60))*17;
 
   FWorld := TbWorld.Create(Self);
   if HQ then
   begin
     FWorld.Renderer.PreloadModels(['level0_hq\model.avm']);
     FWorld.Renderer.PreloadModels(['units_hq\player.avm']);
+    FWorld.Renderer.PreloadModels(['units_hq\enemies.avm']);
     FWorld.Renderer.PreloadModels(['units\model.avm']);
     with TbGameObject.Create(FWorld) do
     begin
