@@ -165,7 +165,7 @@ var s: UnicodeString;
   yyyy: TVec4;
   i: Integer;
 begin
-  s := 'ResumeRestartExitNew gameScoreElapsed timeHealth/5';
+  s := 'ResumeRestartExitNew gameScoreElapsedtimeHealth1234567890:/5';
   for i := 1 to Length(s) do
     GetCanvasCommonData(FMain).GetGlyphImage(cGameFont, s[i], [], xxx, yyyy);
 end;
@@ -194,7 +194,7 @@ procedure TfrmMain.WMRestartLevel(var msg: Cardinal);
 begin
   FreeAndNil(FGameLevel);
   FGameLevel := TGameLevel.Create(FMain);
-  FGameLevel.LoadLevel();
+  FGameLevel.LoadLevel(True);
   FGameLevel.OnRestart := {$IfDef FPC}@{$EndIf}StartGame;
   FGameLevel.OnExit := {$IfDef FPC}@{$EndIf}ExitGame;
 end;

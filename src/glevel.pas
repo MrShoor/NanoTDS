@@ -8,7 +8,7 @@ interface
 
 uses
   Classes, SysUtils,
-  avRes, avTypes, avContnrs, avModel,
+  avRes, avTypes, avContnrs, avModel, avMesh,
   mutils,
   bWorld,
   bLights,
@@ -23,12 +23,13 @@ type
   { TbRobot }
 
   TbRobot = class(TbGameObject)
-  private
+  protected
     FLookAtXZ: TVec2;
     FLastPos : TVec3;
     FPosAccum: TVec3;
     procedure SetLookAtXZ(const AValue: TVec2);
   protected
+    procedure AccumulatePos;
     procedure AfterRegister; override;
     procedure UpdateStep; override;
   public
@@ -95,6 +96,24 @@ type
   IbBulletArr = {$IfDef FPC}specialize{$EndIf}IArray<TbBullet>;
   TbBulletArr = {$IfDef FPC}specialize{$EndIf}TArray<TbBullet>;
 
+  { TbPlayer }
+
+  TbPlayer = class(TbRobot)
+  private
+    FHQTop: IavModelInstance;
+    FHQBot: IavModelInstance;
+    FBotAnimation: IavAnimationController;
+    FTopAnimation: IavAnimationController;
+
+    FShootNextTime: Integer;
+  protected
+    procedure UpdateStep; override;
+  public
+    procedure WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType); override;
+    function  TryShoot(): TbBullet;
+    procedure LoadModels(HQ: Boolean);
+  end;
+
   { TGameLevel }
 
   TGameLevel = class(TavMainRenderChild)
@@ -108,6 +127,7 @@ type
     procedure MenuRestart(ASender: TObject);
     procedure MenuExit(ASender: TObject);
   private
+    FHQ: Boolean;
     FWorld: TbWorld;
     FGlobalLight: IavPointLight;
 
@@ -123,8 +143,7 @@ type
     FBoxes: IBoxes;
     FBaseBoxes: IBoxes;
 
-    FPlayer: TbRobot;
-    FShootNextTime: Integer;
+    FPlayer: TbPlayer;
     FBullets: IbBulletArr;
 
     function IsGameOver(): Boolean;
@@ -136,8 +155,10 @@ type
     procedure EMKeyDown(var AMsg: TavKeyDownMessage); message EM_KEYDOWN;
     procedure EMUps(var AMsg: TavMessage); message EM_UPS;
   public
-    procedure LoadLevel();
+    procedure LoadLevel(AHQ: Boolean = True);
     procedure Draw;
+
+    property HQ: Boolean read FHQ;
 
     property OnRestart: TNotifyEvent read FOnRestart write FOnRestart;
     property OnExit: TNotifyEvent read FOnExit write FOnExit;
@@ -156,6 +177,84 @@ const
   cRedIntervals      : array [0..3] of Integer = (5000, 4000, 3000, 2000);
   cGreenIntervals    : array [0..3] of Integer = (7500, 6000, 4500, 3000);
   cIntencityTimes    : array [0..3] of Integer = (0, 60000, 120000, 180000);
+
+{ TbPlayer }
+
+procedure TbPlayer.UpdateStep;
+var movedir: TVec2;
+begin
+  if Assigned(FHQTop) then
+  begin
+    AccumulatePos;
+
+    FHQTop.Mesh.Transform := Mat4(Quat(Vec(0,-1,0), arctan2(FLookAtXZ.y, FLookAtXZ.x)), Pos);
+    movedir := Vec(FPosAccum.x, FPosAccum.z);
+    if LenSqr(movedir) = 0 then movedir := FLookAtXZ;
+    FHQBot.Mesh.Transform := Mat4(Quat(Vec(0,-1,0), arctan2(movedir.y, movedir.x)), Pos);
+
+    if LenSqr(FPosAccum) < 0.05 then
+      FBotAnimation.AnimationStop('Walk')
+    else
+      FBotAnimation.AnimationStart('Walk');
+    if FWorld.GameTime * Main.UpdateStatesInterval + 100 < FShootNextTime then FTopAnimation.AnimationStop('Shoot0');
+
+    if Assigned(FBotAnimation) then
+      FBotAnimation.SetTime(FWorld.GameTime*Main.UpdateStatesInterval);
+    if Assigned(FTopAnimation) then
+      FTopAnimation.SetTime(FWorld.GameTime*Main.UpdateStatesInterval);
+  end
+  else
+    inherited UpdateStep;
+end;
+
+procedure TbPlayer.WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType);
+begin
+  if Assigned(FHQTop) then
+  begin
+    if AType in [mtDefault, mtEmissive] then
+    begin
+      ACollection.Add(FHQTop);
+      ACollection.Add(FHQBot);
+    end;
+  end
+  else
+    inherited WriteModels(ACollection, AType);
+end;
+
+function TbPlayer.TryShoot: TbBullet;
+var time: Int64;
+    bullet: TbBullet;
+begin
+  Result := nil;
+  time := FWorld.GameTime * Main.UpdateStatesInterval;
+  if time >= FShootNextTime then
+  begin
+    Result := TbBullet.Create(FWorld);
+    Result.AddModel('Bullet');
+    Result.SpeedXZ := SetLen(LookAtXZ, 4*2);
+    Result.Pos := Pos;
+    Result.Rot := Quat(Vec(0,-1,0), arctan2(LookAtXZ.y, LookAtXZ.x));
+    FShootNextTime := time + (1000 div 5);
+
+    GetLightPlayer.GetStream('sounds\shot.wav').Play();
+    if Assigned(FTopAnimation) then FTopAnimation.AnimationStart('Shoot0');
+  end;
+end;
+
+procedure TbPlayer.LoadModels(HQ: Boolean);
+begin
+  if HQ then
+  begin
+    FHQBot := World.Renderer.CreateModelInstances(['BotBottomBody'])[0];
+    FHQBot.Mesh.Transform := Transform();
+    FHQTop := World.Renderer.CreateModelInstances(['BotTopBody'])[0];
+    FHQTop.Mesh.Transform := Transform();
+    FBotAnimation := Create_IavAnimationController(FHQBot.Mesh.Pose, FWorld.GameTime*Main.UpdateStatesInterval);
+    FTopAnimation := Create_IavAnimationController(FHQTop.Mesh.Pose, FWorld.GameTime*Main.UpdateStatesInterval);
+  end
+  else
+    AddModel('Player');
+end;
 
 { TbBullet }
 
@@ -227,6 +326,19 @@ begin
   FLookAtXZ := AValue;
 end;
 
+procedure TbRobot.AccumulatePos;
+var moveStep: TVec3;
+    n: TVec3;
+begin
+  moveStep := Pos - FLastPos;
+  if Len(moveStep) < 0.3 then
+  begin
+    FPosAccum := FPosAccum * 0.93;
+    FPosAccum := FPosAccum + moveStep;
+  end;
+  FLastPos := Pos;
+end;
+
 procedure TbRobot.AfterRegister;
 begin
   inherited AfterRegister;
@@ -236,27 +348,18 @@ begin
 end;
 
 procedure TbRobot.UpdateStep;
-var moveStep: TVec3;
-    look: TQuat;
+var look: TQuat;
     pitch: TQuat;
     n: TVec3;
 begin
   inherited UpdateStep;
+  AccumulatePos;
   pitch.v4 := Vec(0,0,0,1);
-
-  moveStep := Pos - FLastPos;
-  if Len(moveStep) < 0.3 then
+  if LenSqr(FPosAccum) > 0 then
   begin
-    FPosAccum := FPosAccum * 0.93;
-    FPosAccum := FPosAccum + moveStep;
-    if LenSqr(FPosAccum) > 0 then
-    begin
-      n := normalize( cross(Vec(0,1,0), FPosAccum) );
-      pitch := Quat(n, Len(FPosAccum)*0.75);
-    end;
+    n := normalize( cross(Vec(0,1,0), FPosAccum) );
+    pitch := Quat(n, Len(FPosAccum)*0.75);
   end;
-  FLastPos := Pos;
-
   look := Quat(Vec(0,-1,0), arctan2(FLookAtXZ.y, FLookAtXZ.x));
   Rot := pitch * look;
 end;
@@ -426,30 +529,11 @@ begin
 end;
 
 procedure TGameLevel.ProcessInput;
-
-  procedure DoShoot;
-  var time: Int64;
-      bullet: TbBullet;
-  begin
-    time := FWorld.GameTime * Main.UpdateStatesInterval;
-    if time >= FShootNextTime then
-    begin
-      bullet := TbBullet.Create(FWorld);
-      bullet.AddModel('Bullet');
-      bullet.SpeedXZ := SetLen(FPlayer.LookAtXZ, 4*2);
-      bullet.Pos := FPlayer.Pos;
-      bullet.Rot := Quat(Vec(0,-1,0), arctan2(FPlayer.LookAtXZ.y, FPlayer.LookAtXZ.x));
-      FBullets.Add(bullet);
-      FShootNextTime := time + (1000 div 5);
-
-      GetLightPlayer.GetStream('sounds\shot.wav').Play();
-    end;
-  end;
-
 const cPlayerSpeed = 3;
 var lookPt : TVec3;
     speed  : Single;
     moveDir: TVec3;
+    bullet: TbBullet;
 begin
   if not IsFocusedWindow(Main.Window) then Exit;
 
@@ -468,7 +552,11 @@ begin
     FPlayer.LookAtXZ := Vec(lookPt.x, lookPt.z);
   end;
 
-  if IsKeyPressed(VK_LBUTTON) then DoShoot;
+  if IsKeyPressed(VK_LBUTTON) then
+  begin
+    bullet := FPlayer.TryShoot();
+    if Assigned(bullet) then FBullets.Add(bullet);
+  end;
 end;
 
 procedure TGameLevel.EMKeyDown(var AMsg: TavKeyDownMessage);
@@ -482,6 +570,8 @@ procedure TGameLevel.EMUps(var AMsg: TavMessage);
 var
   i: Integer;
 begin
+  if IsKeyPressed(Ord('R')) then FWorld.Renderer.InvalidateShaders;
+
   for i := 0 to AMsg.param - 1 do
     if not FInGameMenu.Visible then
     begin
@@ -498,7 +588,7 @@ begin
     end;
 end;
 
-procedure TGameLevel.LoadLevel;
+procedure TGameLevel.LoadLevel(AHQ: Boolean);
   procedure SetRoute(var Arr: TVec3Arr; V: array of TVec3);
   var i: Integer;
   begin
@@ -512,15 +602,35 @@ procedure TGameLevel.LoadLevel;
   end;
 var i: Integer;
 begin
+  FHQ := AHQ;
+
   Main.Camera.At := Vec(8,0,8);
   Main.Camera.Eye := Main.Camera.At + Vec(0,sin(deg2rad*60),-cos(deg2rad*60))*22;
 
   FWorld := TbWorld.Create(Self);
-  FWorld.Renderer.PreloadModels(['level0\model.avm']);
-  FWorld.Renderer.PreloadModels(['units\model.avm']);
-  with TbGameObject.Create(FWorld) do
+  if HQ then
   begin
-    AddModel('level0');
+    FWorld.Renderer.PreloadModels(['level0_hq\model.avm']);
+    FWorld.Renderer.PreloadModels(['units_hq\player.avm']);
+    FWorld.Renderer.PreloadModels(['units\model.avm']);
+    with TbGameObject.Create(FWorld) do
+    begin
+      AddModel('border');
+      AddModel('cube');
+      AddModel('floor');
+      AddModel('base_decal', mtTransparent);
+      AddModel('spawn_decal_green', mtTransparent);
+      AddModel('spawn_decal_red', mtTransparent);
+    end;
+  end
+  else
+  begin
+    FWorld.Renderer.PreloadModels(['level0\model.avm']);
+    FWorld.Renderer.PreloadModels(['units\model.avm']);
+    with TbGameObject.Create(FWorld) do
+    begin
+      AddModel('level0');
+    end;
   end;
 
   FBaseHP := 5;
@@ -531,8 +641,8 @@ begin
   FGlobalLight.Radius := 40;
   FGlobalLight.CastShadows := True;
 
-  FPlayer := TbRobot.Create(FWorld);
-  FPlayer.AddModel('Player');
+  FPlayer := TbPlayer.Create(FWorld);
+  FPlayer.LoadModels(HQ);
   FPlayer.Pos := Vec(8,0,2);
 
   FInGameMenu := TInGameMenu.Create(Self);
