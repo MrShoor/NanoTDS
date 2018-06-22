@@ -371,15 +371,14 @@ begin
   FPosAccum := FPosAccum + ADir*0.1;
   FHittedTime := World.GameTime * Main.UpdateStatesInterval + 200;
 
+  GetLightPlayer.GetStream('sounds\hit.wav').Play();
   if FHP = 0 then
   begin
     case FBotKind of
       bkRed : GetLightPlayer.GetStream('sounds\red_death.wav').Play();
       bkGreen : GetLightPlayer.GetStream('sounds\green_death.wav').Play();
     end;
-  end
-  else
-    GetLightPlayer.GetStream('sounds\hit.wav').Play();
+  end;
 
   if FHP = 0 then
     if Assigned(FAnimation) then
