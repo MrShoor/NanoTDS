@@ -20,6 +20,8 @@ uses
   bBassLight;
 
 type
+  TModelQuality = (mqLow, mqHigh);
+
   { TbRobot }
 
   TbRobot = class(TbGameObject)
@@ -64,12 +66,17 @@ type
 
     FHittedTime  : Integer;
     FHittedModels: IavModelInstanceArr;
+    FHittedEmissiveModels: IavModelInstanceArr;
+
     FNormalModels: IavModelInstanceArr;
+    FNormalEmissive: IavModelInstanceArr;
   protected
     procedure AfterRegister; override;
     procedure UpdateStep; override;
   public
     procedure AddModel(const AName: string; AType: TModelType = mtDefault); override;
+
+    procedure LoadModels(Q: TModelQuality; ABotKind: TbBotKind);
 
     procedure AddDamage(const ADir: TVec3);
     procedure SetRoute(const ARoute: TVec3Arr; const AVelocity: Single);
@@ -111,7 +118,7 @@ type
   public
     procedure WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType); override;
     function  TryShoot(): TbBullet;
-    procedure LoadModels(HQ: Boolean);
+    procedure LoadModels(Q: TModelQuality);
   end;
 
   { TGameLevel }
@@ -127,7 +134,7 @@ type
     procedure MenuRestart(ASender: TObject);
     procedure MenuExit(ASender: TObject);
   private
-    FHQ: Boolean;
+    FModelQuality: TModelQuality;
     FWorld: TbWorld;
     FGlobalLight: IavPointLight;
 
@@ -155,10 +162,10 @@ type
     procedure EMKeyDown(var AMsg: TavKeyDownMessage); message EM_KEYDOWN;
     procedure EMUps(var AMsg: TavMessage); message EM_UPS;
   public
-    procedure LoadLevel(AHQ: Boolean = True);
+    procedure LoadLevel(AQuality: TModelQuality);
     procedure Draw;
 
-    property HQ: Boolean read FHQ;
+    property ModelQuality: TModelQuality read FModelQuality;
 
     property OnRestart: TNotifyEvent read FOnRestart write FOnRestart;
     property OnExit: TNotifyEvent read FOnExit write FOnExit;
@@ -231,6 +238,7 @@ begin
   begin
     Result := TbBullet.Create(FWorld);
     Result.AddModel('Bullet');
+    Result.AddModel('Bullet', mtEmissive);
     Result.SpeedXZ := SetLen(LookAtXZ, 4*2);
     Result.Pos := Pos;
     Result.Rot := Quat(Vec(0,-1,0), arctan2(LookAtXZ.y, LookAtXZ.x));
@@ -241,19 +249,20 @@ begin
   end;
 end;
 
-procedure TbPlayer.LoadModels(HQ: Boolean);
+procedure TbPlayer.LoadModels(Q: TModelQuality);
 begin
-  if HQ then
-  begin
-    FHQBot := World.Renderer.CreateModelInstances(['BotBottomBody'])[0];
-    FHQBot.Mesh.Transform := Transform();
-    FHQTop := World.Renderer.CreateModelInstances(['BotTopBody'])[0];
-    FHQTop.Mesh.Transform := Transform();
-    FBotAnimation := Create_IavAnimationController(FHQBot.Mesh.Pose, FWorld.GameTime*Main.UpdateStatesInterval);
-    FTopAnimation := Create_IavAnimationController(FHQTop.Mesh.Pose, FWorld.GameTime*Main.UpdateStatesInterval);
-  end
-  else
-    AddModel('Player');
+  case Q of
+    mqHigh:
+      begin
+        FHQBot := World.Renderer.CreateModelInstances(['BotBottomBody'])[0];
+        FHQBot.Mesh.Transform := Transform();
+        FHQTop := World.Renderer.CreateModelInstances(['BotTopBody'])[0];
+        FHQTop.Mesh.Transform := Transform();
+        FBotAnimation := Create_IavAnimationController(FHQBot.Mesh.Pose, FWorld.GameTime*Main.UpdateStatesInterval);
+        FTopAnimation := Create_IavAnimationController(FHQTop.Mesh.Pose, FWorld.GameTime*Main.UpdateStatesInterval);
+      end;
+    mqLow: AddModel('Player');
+  end;
 end;
 
 { TbBullet }
@@ -277,7 +286,7 @@ end;
 procedure TbBot.AfterRegister;
 begin
   inherited AfterRegister;
-  FHittedModels := World.Renderer.CreateModelInstances(['Enemy_hitted']);
+
 end;
 
 procedure TbBot.UpdateStep;
@@ -289,15 +298,43 @@ begin
   LookAtXZ := Lerp(LookAtXZ, Vec(lookDir.x, lookDir.z), 0.05);
 
   if (World.GameTime * Main.UpdateStatesInterval < FHittedTime) then
-    FModels := FHittedModels
+  begin
+    FModels := FHittedModels;
+    FEmissive := FHittedEmissiveModels;
+  end
   else
+  begin
     FModels := FNormalModels;
+    FEmissive := FNormalEmissive;
+  end;
 end;
 
 procedure TbBot.AddModel(const AName: string; AType: TModelType);
 begin
   inherited AddModel(AName, AType);
   FNormalModels := FModels;
+  FNormalEmissive := FEmissive;
+end;
+
+procedure TbBot.LoadModels(Q: TModelQuality; ABotKind: TbBotKind);
+  const cBotKindSuffix: array [TbBotKind] of string = ('_green', '_red');
+  const cQualitySuffix: array [TModelQuality] of string = ('', 'HQ');
+var s: string;
+begin
+  s := 'Enemy'+cQualitySuffix[Q]+cBotKindSuffix[ABotKind];
+  AddModel(s);
+  if Q = mqHigh then
+  begin
+    AddModel(s, mtEmissive);
+    FHittedModels := FNormalModels;
+    FHittedEmissiveModels := World.Renderer.CreateModelInstances(['Enemy_hitted']);
+  end
+  else
+  begin
+    FHittedModels := World.Renderer.CreateModelInstances(['Enemy_hitted']);
+    FHittedEmissiveModels := TavModelInstanceArr.Create();
+  end;
+  FBotKind := ABotKind;
 end;
 
 procedure TbBot.AddDamage(const ADir: TVec3);
@@ -429,27 +466,13 @@ begin
   bot := TbBot.Create(FWorld);
   bot.HP := 3;
   bot.SetRoute(FBotRoutes[Random(2)], 2);
-  if HQ then
-  begin
-    bot.AddModel('EnemyHQ_red');
-    bot.AddModel('EnemyHQ_red', mtEmissive);
-  end
-  else
-    bot.AddModel('Enemy_red');
-  bot.BotKind := bkRed;
+  bot.LoadModels(FModelQuality, bkRed);
   FBots.Add(bot);
 
   bot := TbBot.Create(FWorld);
   bot.HP := 3;
   bot.SetRoute(FBotRoutes[Random(2)+2], 2);
-  if HQ then
-  begin
-    bot.AddModel('EnemyHQ_red');
-    bot.AddModel('EnemyHQ_red', mtEmissive);
-  end
-  else
-    bot.AddModel('Enemy_red');
-  bot.BotKind := bkRed;
+  bot.LoadModels(FModelQuality, bkRed);
   FBots.Add(bot);
 end;
 
@@ -459,14 +482,7 @@ begin
   bot := TbBot.Create(FWorld);
   bot.HP := 2;
   bot.SetRoute(FBotRoutes[Random(2)+4], 3);
-  if HQ then
-  begin
-    bot.AddModel('EnemyHQ_green');
-    bot.AddModel('EnemyHQ_green', mtEmissive);
-  end
-  else
-    bot.AddModel('Enemy_green');
-  bot.BotKind := bkGreen;
+  bot.LoadModels(FModelQuality, bkGreen);
   FBots.Add(bot);
 end;
 
@@ -606,7 +622,7 @@ begin
     end;
 end;
 
-procedure TGameLevel.LoadLevel(AHQ: Boolean);
+procedure TGameLevel.LoadLevel(AQuality: TModelQuality);
   procedure SetRoute(var Arr: TVec3Arr; V: array of TVec3);
   var i: Integer;
   begin
@@ -620,36 +636,34 @@ procedure TGameLevel.LoadLevel(AHQ: Boolean);
   end;
 var i: Integer;
 begin
-  FHQ := AHQ;
+  FModelQuality := AQuality;
 
   Main.Camera.At := Vec(8,0,6.5);
   Main.Camera.Eye := Main.Camera.At + Vec(0,sin(deg2rad*60),-cos(deg2rad*60))*17;
 
   FWorld := TbWorld.Create(Self);
-  if HQ then
-  begin
-    FWorld.Renderer.PreloadModels(['level0_hq\model.avm']);
-    FWorld.Renderer.PreloadModels(['units_hq\player.avm']);
-    FWorld.Renderer.PreloadModels(['units_hq\enemies.avm']);
-    FWorld.Renderer.PreloadModels(['units\model.avm']);
-    with TbGameObject.Create(FWorld) do
-    begin
-      AddModel('border');
-      AddModel('cube');
-      AddModel('floor');
-      AddModel('base_decal', mtTransparent);
-      AddModel('spawn_decal_green', mtTransparent);
-      AddModel('spawn_decal_red', mtTransparent);
-    end;
-  end
-  else
-  begin
-    FWorld.Renderer.PreloadModels(['level0\model.avm']);
-    FWorld.Renderer.PreloadModels(['units\model.avm']);
-    with TbGameObject.Create(FWorld) do
-    begin
-      AddModel('level0');
-    end;
+  case FModelQuality of
+    mqHigh:
+      begin
+        FWorld.Renderer.PreloadModels(['level0_hq\model.avm', 'units_hq\player.avm', 'units_hq\enemies.avm', 'units\model.avm']);
+        with TbGameObject.Create(FWorld) do
+        begin
+          AddModel('border');
+          AddModel('cube');
+          AddModel('floor');
+          AddModel('base_decal', mtTransparent);
+          AddModel('spawn_decal_green', mtTransparent);
+          AddModel('spawn_decal_red', mtTransparent);
+        end;
+      end;
+    mqLow:
+      begin
+        FWorld.Renderer.PreloadModels(['level0\model.avm', 'units\model.avm']);
+        with TbGameObject.Create(FWorld) do
+        begin
+          AddModel('level0');
+        end;
+      end;
   end;
 
   FBaseHP := 5;
@@ -661,7 +675,7 @@ begin
   FGlobalLight.CastShadows := True;
 
   FPlayer := TbPlayer.Create(FWorld);
-  FPlayer.LoadModels(HQ);
+  FPlayer.LoadModels(FModelQuality);
   FPlayer.Pos := Vec(8,0,2);
 
   FInGameMenu := TInGameMenu.Create(Self);
@@ -731,4 +745,3 @@ begin
 end;
 
 end.
-

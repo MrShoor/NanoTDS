@@ -194,7 +194,10 @@ procedure TfrmMain.WMRestartLevel(var msg: Cardinal);
 begin
   FreeAndNil(FGameLevel);
   FGameLevel := TGameLevel.Create(FMain);
-  FGameLevel.LoadLevel(True);
+  if FMainMenu.IsHighQuality then
+    FGameLevel.LoadLevel(mqHigh)
+  else
+    FGameLevel.LoadLevel(mqLow);
   FGameLevel.OnRestart := {$IfDef FPC}@{$EndIf}StartGame;
   FGameLevel.OnExit := {$IfDef FPC}@{$EndIf}ExitGame;
 end;

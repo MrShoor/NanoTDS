@@ -7,7 +7,7 @@ unit gMainMenu;
 interface
 
 uses
-  Classes, SysUtils, avMiniControls, avRes, gControls, mutils;
+  Classes, SysUtils, avMiniControls, avRes, avCanvas, gControls, mutils;
 
 type
 
@@ -18,6 +18,8 @@ type
     FBackPanel: TGamePanel;
     FNewGame  : TGameButton;
     FExit     : TGameButton;
+    FHighQ    : TGameCheckButton;
+    FLowQ     : TGameCheckButton;
 
     FOnExit: TNotifyEvent;
     FOnStartLevel: TNotifyEvent;
@@ -29,6 +31,7 @@ type
     procedure ExitClick(ASender: TObject);
     procedure AfterRegister; override;
   public
+    function IsHighQuality: Boolean;
     property Visible: Boolean read GetVisible write SetVisible;
 
     procedure Draw;
@@ -66,21 +69,43 @@ begin
   inherited AfterRegister;
   FBackPanel := TGamePanel.Create(Self);
   FBackPanel.Origin := Vec(0.5,0.5);
-  FBackPanel.Size := Vec(160, 140);
+  FBackPanel.Size := Vec(160, 220);
 
   FNewGame := TGameButton.Create(FBackPanel);
-  FNewGame.Origin := Vec(0.5,0.5);
   FNewGame.Size := Vec(120, 40);
   FNewGame.Pos := Vec(FBackPanel.Size.x * 0.5, 40);
   FNewGame.Text := 'New game';
   FNewGame.OnClick := {$IfDef FPC}@{$EndIf}NewGameClick;
 
   FExit := TGameButton.Create(FBackPanel);
-  FExit.Origin := Vec(0.5,0.5);
   FExit.Size := Vec(120, 40);
   FExit.Pos := Vec(FBackPanel.Size.x * 0.5, 100);
   FExit.Text := 'Exit';
   FExit.OnClick := {$IfDef FPC}@{$EndIf}ExitClick;
+
+  with TGameLabel.Create(FBackPanel) do
+  begin
+    Origin := Vec(0.5, 0.5);
+    Pos := Vec(FBackPanel.Size.x * 0.5, 160);
+    Text := 'Graphics:';
+    Align := laCenter;
+  end;
+
+  FLowQ := TGameCheckButton.Create(FBackPanel);
+  FLowQ.Size := Vec(50,25);
+  FLowQ.Pos := Vec(45, 190);
+  FLowQ.Text := 'Low';
+
+  FHighQ := TGameCheckButton.Create(FBackPanel);
+  FHighQ.Size := Vec(50,25);
+  FHighQ.Pos := Vec(FBackPanel.Size.x-45, 190);
+  FHighQ.Text := 'High';
+  FHighQ.Checked := True;
+end;
+
+function TGameMainMenu.IsHighQuality: Boolean;
+begin
+  Result := FHighQ.Checked;
 end;
 
 procedure TGameMainMenu.Draw;
