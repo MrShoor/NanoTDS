@@ -70,6 +70,8 @@ type
 
     FNormalModels: IavModelInstanceArr;
     FNormalEmissive: IavModelInstanceArr;
+
+    FAnimation: IavAnimationController;
   protected
     procedure AfterRegister; override;
     procedure UpdateStep; override;
@@ -94,10 +96,12 @@ type
   TbBullet = class(TbGameObject)
   private
     FSpeedXZ: TVec2;
+    FLightSrc: IavPointLight;
   protected
     procedure AfterRegister; override;
     procedure UpdateStep; override;
   public
+    procedure LoadModels(Q: TModelQuality);
     property SpeedXZ: TVec2 read FSpeedXZ write FSpeedXZ;
   end;
   IbBulletArr = {$IfDef FPC}specialize{$EndIf}IArray<TbBullet>;
@@ -107,6 +111,7 @@ type
 
   TbPlayer = class(TbRobot)
   private
+    FQuality: TModelQuality;
     FHQTop: IavModelInstance;
     FHQBot: IavModelInstance;
     FBotAnimation: IavAnimationController;
@@ -237,8 +242,7 @@ begin
   if time >= FShootNextTime then
   begin
     Result := TbBullet.Create(FWorld);
-    Result.AddModel('Bullet');
-    Result.AddModel('Bullet', mtEmissive);
+    Result.LoadModels(FQuality);
     Result.SpeedXZ := SetLen(LookAtXZ, 4*2);
     Result.Pos := Pos;
     Result.Rot := Quat(Vec(0,-1,0), arctan2(LookAtXZ.y, LookAtXZ.x));
@@ -251,6 +255,7 @@ end;
 
 procedure TbPlayer.LoadModels(Q: TModelQuality);
 begin
+  FQuality := Q;
   case Q of
     mqHigh:
       begin
@@ -279,6 +284,21 @@ begin
   inherited UpdateStep;
   speed := Vec(FSpeedXZ.x, 0, FSpeedXZ.y) * (Main.UpdateStatesInterval / 1000);
   Pos := Pos + speed;
+
+  if FLightSrc <> nil then
+    FLightSrc.Pos := Pos + Vec(0,0.5,0);
+end;
+
+procedure TbBullet.LoadModels(Q: TModelQuality);
+begin
+  AddModel('Bullet');
+  if Q = mqHigh then
+  begin
+    AddModel('Bullet', mtEmissive);
+    FLightSrc := World.Renderer.CreatePointLight();
+    FLightSrc.Radius := 4;
+    FLightSrc.Color := Vec(0.8,0.65,0.0)*0.25;
+  end;
 end;
 
 { TbBot }
@@ -293,11 +313,16 @@ procedure TbBot.UpdateStep;
 var lookDir: TVec3;
 begin
   inherited UpdateStep;
-  Pos := TravelByPath(FRoute, FRouteVelocity, FRoutePos, false);
-  lookDir := normalize(FRoute[FRoutePos.Idx+1] - FRoute[FRoutePos.Idx]);
-  LookAtXZ := Lerp(LookAtXZ, Vec(lookDir.x, lookDir.z), 0.05);
+  if FHP > 0 then
+  begin
+    Pos := TravelByPath(FRoute, FRouteVelocity, FRoutePos, false);
+    lookDir := normalize(FRoute[FRoutePos.Idx+1] - FRoute[FRoutePos.Idx]);
+    LookAtXZ := Lerp(LookAtXZ, Vec(lookDir.x, lookDir.z), 0.05);
+  end;
 
-  if (World.GameTime * Main.UpdateStatesInterval < FHittedTime) then
+  if Assigned(FAnimation) then FAnimation.SetTime(World.GameTime * Main.UpdateStatesInterval);
+
+  if (World.GameTime * Main.UpdateStatesInterval < FHittedTime) and (FHP > 0) then
   begin
     FModels := FHittedModels;
     FEmissive := FHittedEmissiveModels;
@@ -307,6 +332,8 @@ begin
     FModels := FNormalModels;
     FEmissive := FNormalEmissive;
   end;
+
+  if (World.GameTime * Main.UpdateStatesInterval >= FHittedTime) and (FHP <= 0) then World.SafeDestroy(Self);
 end;
 
 procedure TbBot.AddModel(const AName: string; AType: TModelType);
@@ -328,6 +355,7 @@ begin
     AddModel(s, mtEmissive);
     FHittedModels := FNormalModels;
     FHittedEmissiveModels := World.Renderer.CreateModelInstances(['Enemy_hitted']);
+    FAnimation := Create_IavAnimationController(FModels[0].Mesh.Pose, FWorld.GameTime * Main.UpdateStatesInterval);
   end
   else
   begin
@@ -342,7 +370,26 @@ begin
   Dec(FHP);
   FPosAccum := FPosAccum + ADir*0.1;
   FHittedTime := World.GameTime * Main.UpdateStatesInterval + 200;
-  GetLightPlayer.GetStream('sounds\hit.wav').Play();
+
+  if FHP = 0 then
+  begin
+    case FBotKind of
+      bkRed : GetLightPlayer.GetStream('sounds\red_death.wav').Play();
+      bkGreen : GetLightPlayer.GetStream('sounds\green_death.wav').Play();
+    end;
+  end
+  else
+    GetLightPlayer.GetStream('sounds\hit.wav').Play();
+
+  if FHP = 0 then
+    if Assigned(FAnimation) then
+    begin
+      FAnimation.AnimationStart('Death');
+      FNormalEmissive.Clear();
+      FHittedTime := FHittedTime + 800;
+    end
+    else
+      World.SafeDestroy(Self);
 end;
 
 procedure TbBot.SetRoute(const ARoute: TVec3Arr; const AVelocity: Single);
@@ -512,13 +559,11 @@ begin
 
   for i := 0 to FBoxes.Count - 1 do
     for j := FBullets.Count - 1 downto 0 do
-    begin
       if FBoxes[i].PtInRect(Vec(FBullets[j].Pos.x, FBullets[j].Pos.z)) then
       begin
         FBullets[j].Free;
         FBullets.DeleteWithSwap(j);
       end;
-    end;
 
   for i := FBots.Count - 1 downto 0 do
     for j := FBullets.Count - 1 downto 0 do
@@ -530,12 +575,7 @@ begin
 
         if FBots[i].HP <= 0 then
         begin
-          case FBots[i].BotKind of
-            bkRed : GetLightPlayer.GetStream('sounds\red_death.wav').Play();
-            bkGreen : GetLightPlayer.GetStream('sounds\green_death.wav').Play();
-          end;
           Inc(FScores);
-          FBots[i].Free;
           FBots.DeleteWithSwap(i);
           Break;
         end;
