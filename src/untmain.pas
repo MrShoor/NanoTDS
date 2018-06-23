@@ -51,13 +51,6 @@ type
     procedure ExitGame(ASender: TObject);
 
     procedure WMRestartLevel(var msg: Cardinal); message WM_RESTART_LEVEL;
-  public
-    {$IfDef FPC}
-    procedure EraseBackground(DC: HDC); override;
-    {$EndIf}
-    {$IfDef DCC}
-    procedure WMEraseBkgnd(var Message: TWmEraseBkgnd); message WM_ERASEBKGND;
-    {$EndIf}
   end;
 
 var
@@ -201,19 +194,6 @@ begin
   FGameLevel.OnRestart := {$IfDef FPC}@{$EndIf}StartGame;
   FGameLevel.OnExit := {$IfDef FPC}@{$EndIf}ExitGame;
 end;
-
-{$IfDef FPC}
-procedure TfrmMain.EraseBackground(DC: HDC);
-begin
-  //inherited EraseBackground(DC);
-end;
-{$EndIf}
-{$IfDef DCC}
-procedure TfrmMain.WMEraseBkgnd(var Message: TWmEraseBkgnd);
-begin
-  Message.Result := 1;
-end;
-{$EndIf}
 
 end.
 
