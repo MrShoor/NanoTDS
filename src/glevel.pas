@@ -208,12 +208,12 @@ begin
       FBotAnimation.AnimationStop('Walk')
     else
       FBotAnimation.AnimationStart('Walk');
-    if FWorld.GameTime * Main.UpdateStatesInterval + 100 < FShootNextTime then FTopAnimation.AnimationStop('Shoot0');
+    if FWorld.GameTime + 100 < FShootNextTime then FTopAnimation.AnimationStop('Shoot0');
 
     if Assigned(FBotAnimation) then
-      FBotAnimation.SetTime(FWorld.GameTime*Main.UpdateStatesInterval);
+      FBotAnimation.SetTime(FWorld.GameTime);
     if Assigned(FTopAnimation) then
-      FTopAnimation.SetTime(FWorld.GameTime*Main.UpdateStatesInterval);
+      FTopAnimation.SetTime(FWorld.GameTime);
   end
   else
     inherited UpdateStep;
@@ -238,7 +238,7 @@ var time: Int64;
     bullet: TbBullet;
 begin
   Result := nil;
-  time := FWorld.GameTime * Main.UpdateStatesInterval;
+  time := FWorld.GameTime;
   if time >= FShootNextTime then
   begin
     Result := TbBullet.Create(FWorld);
@@ -263,8 +263,8 @@ begin
         FHQBot.Mesh.Transform := Transform();
         FHQTop := World.Renderer.CreateModelInstances(['BotTopBody'])[0];
         FHQTop.Mesh.Transform := Transform();
-        FBotAnimation := Create_IavAnimationController(FHQBot.Mesh.Pose, FWorld.GameTime*Main.UpdateStatesInterval);
-        FTopAnimation := Create_IavAnimationController(FHQTop.Mesh.Pose, FWorld.GameTime*Main.UpdateStatesInterval);
+        FBotAnimation := Create_IavAnimationController(FHQBot.Mesh.Pose, FWorld.GameTime);
+        FTopAnimation := Create_IavAnimationController(FHQTop.Mesh.Pose, FWorld.GameTime);
       end;
     mqLow: AddModel('Player');
   end;
@@ -320,9 +320,9 @@ begin
     LookAtXZ := Lerp(LookAtXZ, Vec(lookDir.x, lookDir.z), 0.05);
   end;
 
-  if Assigned(FAnimation) then FAnimation.SetTime(World.GameTime * Main.UpdateStatesInterval);
+  if Assigned(FAnimation) then FAnimation.SetTime(World.GameTime);
 
-  if (World.GameTime * Main.UpdateStatesInterval < FHittedTime) and (FHP > 0) then
+  if (World.GameTime < FHittedTime) and (FHP > 0) then
   begin
     FModels := FHittedModels;
     FEmissive := FHittedEmissiveModels;
@@ -333,7 +333,7 @@ begin
     FEmissive := FNormalEmissive;
   end;
 
-  if (World.GameTime * Main.UpdateStatesInterval >= FHittedTime) and (FHP <= 0) then World.SafeDestroy(Self);
+  if (World.GameTime >= FHittedTime) and (FHP <= 0) then World.SafeDestroy(Self);
 end;
 
 procedure TbBot.AddModel(const AName: string; AType: TModelType);
@@ -355,7 +355,7 @@ begin
     AddModel(s, mtEmissive);
     FHittedModels := FNormalModels;
     FHittedEmissiveModels := World.Renderer.CreateModelInstances(['Enemy_hitted']);
-    FAnimation := Create_IavAnimationController(FModels[0].Mesh.Pose, FWorld.GameTime * Main.UpdateStatesInterval);
+    FAnimation := Create_IavAnimationController(FModels[0].Mesh.Pose, FWorld.GameTime);
   end
   else
   begin
@@ -369,7 +369,7 @@ procedure TbBot.AddDamage(const ADir: TVec3);
 begin
   Dec(FHP);
   FPosAccum := FPosAccum + ADir*0.1;
-  FHittedTime := World.GameTime * Main.UpdateStatesInterval + 200;
+  FHittedTime := World.GameTime + 200;
 
   GetLightPlayer.GetStream('sounds\hit.wav').Play();
   if FHP = 0 then
@@ -460,7 +460,7 @@ var time: Int64;
     intensity: Integer;
 begin
   inherited UpdateStep;
-  time := World.GameTime * Main.UpdateStatesInterval;
+  time := World.GameTime;
   if FNextIn < time then
   begin
     intensity := 0;
@@ -593,7 +593,7 @@ begin
   begin
     FreeAndNil(FBotRedSpawner);
     FreeAndNil(FBotGreenSpawner);
-    FGameOverMenu.ElapsedTime := FWorld.GameTime * Main.UpdateStatesInterval;
+    FGameOverMenu.ElapsedTime := FWorld.GameTime;
     FGameOverMenu.Score := FScores;
     FGameOverMenu.Visible := True;
     FHUD.HP := 0;
@@ -656,7 +656,7 @@ begin
 
         FHUD.HP := FBaseHP;
         FHUD.Score := FScores;
-        FHUD.ElapsedTime := FWorld.GameTime * Main.UpdateStatesInterval;
+        FHUD.ElapsedTime := FWorld.GameTime;
       end;
     end;
 end;
@@ -775,7 +775,7 @@ begin
   Main.Clear(cGameClearColor, True, Main.Projection.DepthRange.y, True);
   FWorld.Renderer.DrawWorld;
 
-  FHUD.Pos := Vec(Main.WindowSize.x-1.0, 0);
+  FHUD.Pos := Vec(Main.WindowSize.x-15.0, 0);
   FHUD.Draw;
   FInGameMenu.Draw;
   FGameOverMenu.Pos := Main.WindowSize * 0.5;
